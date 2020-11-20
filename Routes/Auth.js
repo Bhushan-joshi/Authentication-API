@@ -26,4 +26,7 @@ Router.post('/reset-password', controllers.postResetPassword)
 
 Router.post('/change-password',isAuth,controllers.postChangePassword)
 
+Router.post('/enable2fa',isAuth,controllers.postEnable2FA)
+Router.post('/verify2fa',isAuth,controllers.postVerifyTOTP)
+
 module.exports = Router;

@@ -44,6 +44,13 @@ const userShema=new Schema({
 	forgotPasswordTokenCreatedOn:{
 		type:String
 	},
+	is2FA:{
+		type:Boolean,
+		default:false
+	},
+	twoFactorAuth:{
+		type:Object
+	}
 });
 
 module.exports = mongoose.model('User', userShema);

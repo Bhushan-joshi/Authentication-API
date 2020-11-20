@@ -7,6 +7,8 @@ const activate = require('../templates/newuser')
 const forgotPassword = require('../templates/forgotPassword');
 const newLogin = require('../templates/newLogin')
 const userAgent = require('express-useragent');
+const speakeasy = require('speakeasy');
+const qrcode = require('qrcode');
 
 
 const signInMail = (email,name, device, ip, date, os, geoIp) => {
@@ -126,26 +128,54 @@ exports.postSignin = (req, res) => {
 			const salt = user.salt;
 			const hash = crypto.pbkdf2Sync(password, salt, 10, 32, 'sha256').toString('hex');
 			if (hash === user.hash) {
-				const token = jwt.sign({
-					id: user.id
-				}, process.env.KEY, { algorithm: `HS256`, expiresIn: '3600s' })
-				const decode = jwt.decode(token);
-				res.setHeader('Authorization', token)
-				res.status(200).json({
-					token: token,
-					is2FA: user.is2FA,
-					expiresIn: decode.exp,
-					message: "login successfully"
-				})
-				const source = req.headers["user-agent"]
-				const userA = userAgent.parse(source);
-				signInMail(user.email, user.firstName, userA.browser, req.ip, new Date().toLocaleString(), userA.os, userA.geoIp)
+				if (user.is2FA) {
+					const validate = speakeasy.totp.verify({
+						secret: user.twoFactorAuth.base32,
+						encoding: 'base32',
+						token: otp,
+					})
+					if (validate) {
+						const token = jwt.sign({
+							id: user.id
+						}, process.env.KEY, { algorithm: `HS256`, expiresIn: '3600s' })
+						const decode = jwt.decode(token);
+						res.setHeader('Authorization', token)
+						res.status(200).json({
+							token: token,
+							is2FA: user.is2FA,
+							expiresIn: decode.exp,
+							message: "login successfully"
+						})
+						const source = req.headers["user-agent"]
+						const userA = userAgent.parse(source);
+						signInMail(user.email,user.firstName, userA.browser, req.ip, new Date().toLocaleString(), userA.os, userA.geoIp)
+					} else {
+						res.status(400).json({
+							message: 'Error! Invalid OTP!',
+						})
+					}
+				} else {
+					const token = jwt.sign({
+						id: user.id
+					}, process.env.KEY, { algorithm: `HS256`, expiresIn: '3600s' })
+					const decode = jwt.decode(token);
+					res.setHeader('Authorization', token)
+					res.status(200).json({
+						token: token,
+						is2FA: user.is2FA,
+						expiresIn: decode.exp,
+						message: "login successfully"
+					})
+					const source = req.headers["user-agent"]
+					const userA = userAgent.parse(source);
+					signInMail(user.email,user.firstName, userA.browser, req.ip, new Date().toLocaleString(), userA.os, userA.geoIp)
+				}
 			} else {
 				res.status(400).json({
 					message: 'Invalid Email or password ',
 				})
 			}
-		}).catch(err => {
+		}).catch(err => {//findOne's catch block
 			res.status(500).json({
 				...err,
 				message: 'Invalid Email or password ',
@@ -254,6 +284,68 @@ exports.postChangePassword = (req, res) => {
 		res.status(400).json({
 			message: "No user found !",
 			...err
+		})
+	})
+}
+
+exports.postEnable2FA = (req, res) => {
+	User.findById(req.user).then(user => {
+		if (!user.is2FA) {
+			const tempSecret = speakeasy.generateSecret();
+			user.is2FA = true;
+			user.twoFactorAuth = tempSecret;
+			qrcode.toDataURL(tempSecret.otpauth_url).then(qr => {
+				user.save().then(saveUser => {
+					res.status(200).json({
+						message: "enabled 2FA!",
+						qrcode: qr,
+						base32: saveUser.twoFactorAuth.base32,
+						is2FA: user.is2FA,
+					})
+				}).catch(err => {
+					console.error(err);
+					res.status(500).json({
+						message: "Something went wrong !"
+					})
+				})
+			}).catch(err => {
+				console.log(err);
+			})
+		}else{
+			qrcode.toDataURL(user.twoFactorAuth.otpauth_url).then(code=>{
+				res.status(200).json({
+					message: "Already enabled 2FA!",
+					qrcode: code,
+					base32: user.twoFactorAuth.base32,
+					is2FA: user.is2FA,
+				})
+			})
+		}
+	}).catch(err => {
+		console.log(err);
+		res.status(500).json({
+			message: "Something went wrong ! unable find user"
+		})
+	})
+}
+
+
+exports.postVerifyTOTP = (req, res) => {
+	const { token } = req.body;
+	User.findById(req.user).then(user => {
+		const verify = speakeasy.totp.verify({
+			secret: user.twoFactorAuth.base32,
+			encoding: 'base32',
+			token: token
+		});
+		res.json({
+			verify: verify
+		})
+		console.log(verify);
+	}).catch(err => {
+		console.error(err);
+		res.status(500).json({
+			message: "Something went wrong ! unable find user"
 		})
 	})
 }
