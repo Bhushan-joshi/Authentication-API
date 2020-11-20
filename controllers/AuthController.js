@@ -8,6 +8,7 @@ const forgotPassword = require('../templates/forgotPassword');
 const newLogin = require('../templates/newLogin')
 const userAgent = require('express-useragent');
 
+
 const signInMail = (email,name, device, ip, date, os, geoIp) => {
 	sgMail.setApiKey(process.env.SG_KEY);
 	const message = {
@@ -218,4 +219,41 @@ exports.postResetPassword = (req, res) => {
 				message: "Something went wrong ! unable to save password"
 			})
 		})
+}
+
+exports.postChangePassword = (req, res) => {
+	const { oldPassword, newPassword, confirmNewPassword } = req.body;
+	User.findById(req.user).then(user => {
+		const hash = crypto.pbkdf2Sync(oldPassword, user.salt, 10, 32, 'sha256').toString('hex');
+		if (hash === user.hash) {
+			if (newPassword === confirmNewPassword) {
+				const newhash = crypto.pbkdf2Sync(newPassword, user.salt, 10, 32, 'sha256').toString('hex');
+				user.hash = newhash;
+				user.save().then(saveUser => {
+					res.status(200).json({
+						message: "Password change successfully"
+					})
+				}).catch(err => {
+					console.log(err);
+					res.status(500).json({
+						message: "Enable to change password "
+					})
+				})
+			} else {
+				return res.status(400).json({
+					message: "Password fields must match!"
+				})
+			}
+
+		} else {
+			return res.status(400).json({
+				message: "Please enter correct password"
+			})
+		}
+	}).catch(err => {
+		res.status(400).json({
+			message: "No user found !",
+			...err
+		})
+	})
 }

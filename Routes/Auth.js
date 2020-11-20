@@ -1,8 +1,7 @@
 const { Router } = require("express");
 const controllers = require('../controllers/AuthController');
 const { check, body } = require('express-validator');
-
-
+const isAuth = require('../util/isAuth');
 
 Router.post('/signup',
 	[check('email').normalizeEmail().isEmail().withMessage('Invalid Email !'),
@@ -24,5 +23,7 @@ Router.post('/req-reset-password',
 	controllers.getForgotPassword);
 
 Router.post('/reset-password', controllers.postResetPassword)
+
+Router.post('/change-password',isAuth,controllers.postChangePassword)
 
 module.exports = Router;
