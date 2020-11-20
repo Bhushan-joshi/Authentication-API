@@ -38,6 +38,12 @@ const userShema=new Schema({
 	activationTokenCreatedOn:{
 		type:String,
 	},
+	forgotPasswordToken:{
+		type:String,
+	},
+	forgotPasswordTokenCreatedOn:{
+		type:String
+	},
 });
 
 module.exports = mongoose.model('User', userShema);

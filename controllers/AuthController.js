@@ -3,9 +3,10 @@ const crypto = require('crypto');
 const { validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const sgMail = require('@sendgrid/mail');
-const activate = require('../templates/NewUser')
-const userAgent = require('express-useragent');
+const activate = require('../templates/newuser')
+const forgotPassword = require('../templates/forgotPassword');
 const newLogin = require('../templates/newLogin')
+const userAgent = require('express-useragent');
 
 const signInMail = (email,name, device, ip, date, os, geoIp) => {
 	sgMail.setApiKey(process.env.SG_KEY);
@@ -147,6 +148,74 @@ exports.postSignin = (req, res) => {
 			res.status(500).json({
 				...err,
 				message: 'Invalid Email or password ',
+			})
+		})
+}
+
+exports.getForgotPassword = (req, res) => {
+	const { email } = req.body;
+	User.findOne({ email: email }).then(user => {
+		if (!user) {
+			res.status(400).json({
+				message: 'No users found',
+			})
+		} else {
+			crypto.randomBytes(64, (error, buffer) => {
+				if (error) {
+					return res.status(500).json({
+						message: "Something went Wrong on our end ! please try again",
+					})
+				}
+				const token = buffer.toString('hex');
+				user.forgotPasswordToken = token;
+				user.forgotPasswordTokenCreatedOn = (Date.now() + 900000).toString()
+				user.save().then(userSave => {
+					sgMail.setApiKey(process.env.SG_KEY);
+					const message = {
+						to: userSave.email,
+						from: {
+							name: 'Ebuy',
+							email: 'pathareketan1@gmail.com'
+						},
+						subject: 'Password Reset',
+						html: forgotPassword(userSave.firstName, userSave.email, userSave.forgotPasswordToken),
+					}
+					sgMail.send(message).then(email => {
+						res.status(200).json({
+							email: 'mail send'
+						})
+					}).catch(err => {
+						res.status(500).json({
+							message: "Something went wrong ! unable to send Email"
+						})
+					})
+				})
+			})
+		}
+	})
+}
+
+exports.postResetPassword = (req, res) => {
+	const { token, confirmPassword, password } = req.body;
+	User.findOne({ forgotPasswordToken: token, forgotPasswordTokenCreatedOn: { $gt: Date.now().toString() } })
+		.then(user => {
+			if (password === confirmPassword) {
+				const hash = crypto.pbkdf2Sync(password, user.salt, 10, 32, 'sha256');
+				user.hash = hash.toString('hex');
+				user.forgotPasswordTokenCreatedOn = undefined;
+				user.forgotPasswordToken = undefined;
+				user.save();
+				res.status(200).json({
+					message: "password change sucessfully!"
+				})
+			} else {
+				res.status(400).json({
+					message: "password must match!"
+				})
+			}
+		}).catch(err => {
+			res.status(500).json({
+				message: "Something went wrong ! unable to save password"
 			})
 		})
 }

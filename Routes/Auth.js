@@ -19,4 +19,10 @@ Router.post('/signin',
 	controllers.postSignin)
 
 
+Router.post('/req-reset-password',
+	[check('email').isEmail().normalizeEmail().withMessage('Invalid Email !')],
+	controllers.getForgotPassword);
+
+Router.post('/reset-password', controllers.postResetPassword)
+
 module.exports = Router;
